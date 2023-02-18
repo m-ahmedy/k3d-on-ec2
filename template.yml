@@ -1,0 +1,59 @@
+Description: >
+  K8s K3D Cluster
+
+Parameters:  
+  AmiId:
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    Default: "/aws/service/canonical/ubuntu/server/jammy/stable/current/amd64/hvm/ebs-gp2/ami-id"
+
+  KeyName:
+    Type: String
+    Default: us-west-2-key
+
+Resources:
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: K8s-k3d-SecGrp
+      GroupDescription: Allow port 22
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.small
+      SecurityGroups:
+      - !Ref InstanceSecurityGroup
+      KeyName: !Ref KeyName
+      ImageId: !Ref AmiId
+      Tags:
+        - Key: Name
+          Value: !Sub K8s k3d Cluster
+      UserData: !Base64 |
+        #!/bin/bash
+        cd /tmp
+
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sh get-docker.sh
+        usermod -a -G docker ubuntu
+
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+        wget -q -O - https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+
+  InstanceEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref EC2Instance
+
+Outputs:
+  InstanceIp:
+    Value: !GetAtt InstanceEIP.PublicIp
+    Export:
+      Name: K8s-K3D-Instance-IP
